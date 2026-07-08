@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Truck, ChartPieSlice, WarningCircle, CheckCircle, Brain, CurrencyInr,
   GasPump, UserGear, TrafficSignal, Moon, Sun, Export, Copy, FloppyDisk,
-  Trash, Lightning, Leaf, Bank, ArrowClockwise, Info, Path, Plus, Stack,
+  Trash, Lightning, Leaf, Bank, ArrowClockwise, Info, Plus, Stack, Faders, X,
 } from '@phosphor-icons/react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, ComposedChart, Area,
@@ -59,6 +59,7 @@ export default function App() {
   const [dark, setDark] = useState<boolean>(() => localStorage.getItem('tco-theme') === 'dark');
   const [scenarios, setScenarios] = useState<Scenario[]>(() => loadScenarios());
   const [toast, setToast] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // mobile/tablet input panel
 
   const results = useMemo(() => calculateTCO(params), [params]);
   const evResult = useMemo(() => (params.ev.enabled ? calculateEv(params, results) : null), [params, results]);
@@ -159,33 +160,43 @@ export default function App() {
   const fuelBench = benchmark(results.fuelWeightage, 25, 45);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+    <div className="h-dvh flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
       {/* Header */}
-      <header className="bg-slate-900 dark:bg-slate-950 text-white px-4 sm:px-6 py-3 shadow-lg flex flex-wrap gap-3 justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2 rounded-lg"><Truck size={24} weight="fill" /></div>
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight">Chennai Fleet TCO Simulator</h1>
-            <p className="text-[11px] text-slate-400">Lifecycle NPV · TAT · Risk-adjusted</p>
+      <header className="bg-slate-900 dark:bg-slate-950 text-white px-4 sm:px-6 py-3 shadow-lg flex gap-3 justify-between items-center shrink-0 z-50">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="bg-blue-600 p-2 rounded-lg shrink-0"><Truck size={24} weight="fill" /></div>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-bold tracking-tight truncate">Chennai Fleet TCO Simulator</h1>
+            <p className="text-[11px] text-slate-400 hidden sm:block">Lifecycle NPV · TAT · Risk-adjusted</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <button
+            onClick={() => setSidebarOpen((o) => !o)}
+            className="lg:hidden flex items-center gap-1.5 bg-white/10 hover:bg-white/20 transition-colors px-3 py-2 rounded-lg font-medium text-sm"
+            aria-label={sidebarOpen ? 'Hide inputs' : 'Show inputs'}
+          >
+            {sidebarOpen ? <X size={18} /> : <Faders size={18} />}
+            <span className="hidden sm:inline">Inputs</span>
+          </button>
           <IconBtn onClick={() => setDark((d) => !d)} title="Toggle theme" aria={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </IconBtn>
-          <IconBtn onClick={handleReset} title="Reset defaults" aria="Reset to defaults"><ArrowClockwise size={18} /></IconBtn>
-          <IconBtn onClick={handleShare} title="Copy shareable link" aria="Copy shareable link"><Copy size={18} /></IconBtn>
-          <IconBtn onClick={() => exportCsv(params, results)} title="Export CSV" aria="Export CSV"><Export size={18} /></IconBtn>
-          <IconBtn onClick={handleSaveScenario} title="Save scenario" aria="Save scenario"><FloppyDisk size={18} /></IconBtn>
-          <button onClick={handleAnalyze} className="bg-blue-600 hover:bg-blue-700 transition-colors px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 font-medium text-sm">
-            <Brain size={18} /> Run Advisor
+          <div className="hidden sm:flex items-center gap-2">
+            <IconBtn onClick={handleReset} title="Reset defaults" aria="Reset to defaults"><ArrowClockwise size={18} /></IconBtn>
+            <IconBtn onClick={handleShare} title="Copy shareable link" aria="Copy shareable link"><Copy size={18} /></IconBtn>
+            <IconBtn onClick={() => exportCsv(params, results)} title="Export CSV" aria="Export CSV"><Export size={18} /></IconBtn>
+            <IconBtn onClick={handleSaveScenario} title="Save scenario" aria="Save scenario"><FloppyDisk size={18} /></IconBtn>
+          </div>
+          <button onClick={handleAnalyze} className="bg-blue-600 hover:bg-blue-700 transition-colors px-3 sm:px-4 py-2 rounded-lg flex items-center gap-2 font-medium text-sm shrink-0">
+            <Brain size={18} /> <span className="hidden sm:inline">Run Advisor</span>
           </button>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-full lg:w-[400px] border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-y-auto p-6 flex flex-col gap-8 shrink-0">
+        <aside className={`${sidebarOpen ? 'flex' : 'hidden'} lg:flex w-full lg:w-[360px] xl:w-[400px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 lg:overflow-y-auto lg:min-h-0 p-5 sm:p-6 flex-col gap-8 shrink-0`}>
           <div className="space-y-1">
             <FieldLabel label="Chennai Route Preset" tip="Load a representative route configuration" />
             <select
@@ -347,9 +358,9 @@ export default function App() {
         </aside>
 
         {/* Dashboard */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+        <div className="flex-1 min-h-0 lg:overflow-y-auto p-4 sm:p-6 space-y-6">
           {/* Summary cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <SummaryCard label="Monthly Savings" value={formatINR(results.monthlySavings)} trend={results.monthlySavings > 0 ? 'up' : 'down'} sub={`Fleet of ${numV} units`} />
             <SummaryCard label={`NPV Savings · ${params.finance.holdingYears}yr`} value={formatCompact(results.npvSavings)} trend={results.npvSavings > 0 ? 'up' : 'down'} sub="Discounted lifecycle" icon={<Bank size={16} className="text-slate-400" />} />
             <SummaryCard label="Cost / Km (own)" value={`₹${results.costPerKm.toFixed(2)}`} sub={`Market ₹${results.marketRatePerKm.toFixed(2)} · ${cpkBench.label}`} tone={cpkBench.tone} />
