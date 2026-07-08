@@ -511,16 +511,16 @@ export default function App() {
             </div>
 
             <div className="lg:col-span-1">
-              <Card title="Advisory Insight" className="h-full bg-slate-900 dark:bg-slate-950 text-white overflow-hidden relative">
+              <Card title="Advisory Insight" className="h-full overflow-hidden relative">
                 {report ? (
                   <div className="max-w-none overflow-y-auto max-h-[500px]">
-                    <div className="bg-slate-800/50 p-3 rounded-lg mb-4 text-[11px] font-mono text-blue-400">// Rule-based TCO Advisor</div>
-                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(report) }} className="text-slate-300 text-xs leading-relaxed space-y-2" />
+                    <div className="bg-slate-100 dark:bg-slate-900/50 p-3 rounded-lg mb-4 text-[11px] font-mono text-blue-600 dark:text-blue-400">// Rule-based TCO Advisor</div>
+                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(report) }} className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed space-y-2" />
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                    <Brain size={64} weight="duotone" className="text-slate-700 mb-4" />
-                    <p className="text-slate-500 text-sm">Run Advisor for a verdict, risk scan & action plan</p>
+                    <Brain size={64} weight="duotone" className="text-slate-300 dark:text-slate-700 mb-4" />
+                    <p className="text-slate-400 dark:text-slate-500 text-sm">Run Advisor for a verdict, risk scan & action plan</p>
                   </div>
                 )}
               </Card>
@@ -610,7 +610,7 @@ function Tornado({ factors }: { factors: { factor: string; low: number; high: nu
 
 // --- Markdown renderer (app-generated content only) ------------------------
 function renderMarkdown(md: string): string {
-  const inline = (t: string) => t.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+  const inline = (t: string) => t.replace(/\*\*(.+?)\*\*/g, '<strong class="text-slate-900 dark:text-white font-semibold">$1</strong>');
   const lines = md.split('\n');
   const html: string[] = [];
   let inList = false;
@@ -618,7 +618,7 @@ function renderMarkdown(md: string): string {
   for (const line of lines) {
     if (line.startsWith('## ')) {
       closeList();
-      html.push(`<h4 class="text-blue-400 font-bold uppercase tracking-widest text-[11px] mt-4 mb-1">${inline(line.slice(3))}</h4>`);
+      html.push(`<h4 class="text-blue-600 dark:text-blue-400 font-bold uppercase tracking-widest text-[11px] mt-4 mb-1">${inline(line.slice(3))}</h4>`);
     } else if (line.startsWith('- ')) {
       if (!inList) { html.push('<ul class="list-disc pl-4 space-y-1">'); inList = true; }
       html.push(`<li>${inline(line.slice(2))}</li>`);
