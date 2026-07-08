@@ -1,5 +1,5 @@
 import { TCOParams, SimulationResult } from '../types';
-import { formatINR } from './calculations';
+import { formatINR, formatCompact } from './calculations';
 
 /**
  * Rule-based logistics advisor.
@@ -48,8 +48,32 @@ export const generateAnalysis = (params: TCOParams, result: SimulationResult): s
       `justify ownership. Stay with outsourced trucks until demand rises.`;
   }
 
+  // Lifecycle context appended to every verdict.
+  const npvLine =
+    result.npvSavings >= 0
+      ? ` Over a ${params.finance.holdingYears}-year horizon, the discounted (NPV) advantage of owning is **${formatCompact(
+          result.npvSavings
+        )}**.`
+      : ` But on a ${params.finance.holdingYears}-year NPV basis, ownership is **${formatCompact(
+          Math.abs(result.npvSavings)
+        )}** more expensive once financing and residual value are discounted.`;
+  verdict += npvLine;
+
   // --- 2. Risk Analysis -----------------------------------------------------
   const risks: string[] = [];
+
+  if (isProfitable && result.npvSavings < 0) {
+    risks.push(
+      `- **Positive monthly cash flow but negative lifecycle NPV.** The monthly saving does not survive ` +
+        `discounting over ${params.finance.holdingYears} years — capital cost and depreciation outweigh it. Treat with caution.`
+    );
+  }
+
+  risks.push(
+    `- **Carbon exposure.** The diesel fleet emits ~**${result.co2TonnesPerYear.toFixed(
+      0
+    )} tonnes CO₂/year**. Tightening emission norms and fuel duties are a structural cost risk — an electric option may hedge it.`
+  );
 
   if (result.fuelWeightage > 45) {
     risks.push(

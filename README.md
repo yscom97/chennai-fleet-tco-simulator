@@ -2,10 +2,25 @@
 
 A Total Cost of Ownership (TCO) and feasibility simulator for logistics operations in
 Chennai, India. Compare owning a truck fleet vs. hiring from the market, with a built-in
-rule-based advisor and sensitivity analysis.
+rule-based advisor, lifecycle NPV modelling, and probabilistic risk analysis.
 
 Fully self-contained — **no API keys or backend required**. All calculations and the
 advisory report run locally in the browser.
+
+## Features
+
+- **Lifecycle NPV** — discounted total cost over the ownership horizon, with residual
+  value recovery, depreciation, and diesel/salary escalation (ICCT / NREL T3CO-style).
+- **Availability-aware** — owned-fleet downtime is back-filled by market hire, so uptime
+  actually moves the numbers.
+- **Monte Carlo risk** — 1,000-run simulation over diesel price, mileage, rotation and
+  interest, returning the probability that ownership stays profitable (P10 / P50 / P90).
+- **Tornado sensitivity** — ranks the cost drivers by swing impact.
+- **EV vs Diesel** — battery-electric lifecycle NPV and CO₂ comparison (eFAST India-style),
+  honest about India's coal-heavy grid intensity.
+- **Accurate cost structure** — every rupee attributed (no magic-number placeholders).
+- **Scenario save & compare**, **CSV export**, **shareable URL**, **dark mode**, and a
+  rule-based advisor (Verdict / Risk / Action Plan).
 
 ## Run Locally
 
