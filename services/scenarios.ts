@@ -1,6 +1,39 @@
 import { TCOParams, SimulationResult, Scenario } from '../types';
 import { formatINR } from './calculations';
 
+// --- Chennai route presets (representative values; edit with real data) -----
+export interface RoutePreset {
+  name: string;
+  hint: string;
+  patch: (base: TCOParams) => Partial<TCOParams>;
+}
+
+export const ROUTE_PRESETS: RoutePreset[] = [
+  {
+    name: 'Port Shuttle (short haul)',
+    hint: 'Chennai Port ↔ nearby CFS · high rotation, heavy idling',
+    patch: () => ({
+      market: { unitType: 'Trip', unitRate: 9000, tripDistance: 60, monthlyTrips: 40, availabilityPercent: 90, tonnage: 20 },
+      opexVariable: { dieselPrice: 94.5, mileageKml: 4.2, idlingHoursPerTrip: 4, idlingFuelRate: 1.5, adBlueCostPerKm: 0.5, tireCostPerKm: 1.8, maintenancePerKm: 1.2, fastagPerTrip: 400, incidentalsPerTrip: 600 },
+    }),
+  },
+  {
+    name: 'Bengaluru Long-haul',
+    hint: 'Chennai ↔ Bengaluru · low rotation, low idling, high tolls',
+    patch: () => ({
+      market: { unitType: 'Trip', unitRate: 28000, tripDistance: 700, monthlyTrips: 8, availabilityPercent: 94, tonnage: 20 },
+      opexVariable: { dieselPrice: 94.5, mileageKml: 4.8, idlingHoursPerTrip: 1, idlingFuelRate: 1.5, adBlueCostPerKm: 0.5, tireCostPerKm: 2.0, maintenancePerKm: 1.4, fastagPerTrip: 2400, incidentalsPerTrip: 1000 },
+    }),
+  },
+  {
+    name: 'Regional Distribution',
+    hint: 'Tamil Nadu regional · balanced rotation',
+    patch: () => ({
+      market: { unitType: 'Trip', unitRate: 12500, tripDistance: 120, monthlyTrips: 26, availabilityPercent: 92, tonnage: 20 },
+    }),
+  },
+];
+
 const STORAGE_KEY = 'chennai-tco-scenarios';
 
 export const loadScenarios = (): Scenario[] => {

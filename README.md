@@ -17,7 +17,15 @@ advisory report run locally in the browser.
   interest, returning the probability that ownership stays profitable (P10 / P50 / P90).
 - **Tornado sensitivity** — ranks the cost drivers by swing impact.
 - **EV vs Diesel** — battery-electric lifecycle NPV and CO₂ comparison (eFAST India-style),
+  with charger CAPEX, opportunity-charging downtime, and battery-weight payload penalty;
   honest about India's coal-heavy grid intensity.
+- **Non-linear maintenance aging** — upkeep cost escalates with vehicle age in the NPV.
+- **WDV depreciation tax shield** — India Income-Tax written-down-value tax benefit (toggleable).
+- **Confidence band** — the break-even chart shows the P10–P90 own-cost uncertainty as a
+  shaded area, from a per-rotation Monte Carlo with fuel↔freight-rate correlation.
+- **Mixed fleet** — model heterogeneous vehicle types (count / cost / mileage / residual)
+  aggregated across the whole TCO.
+- **Chennai route presets** — one-click representative configurations (port shuttle, long-haul…).
 - **Accurate cost structure** — every rupee attributed (no magic-number placeholders).
 - **Scenario save & compare**, **CSV export**, **shareable URL**, **dark mode**, and a
   rule-based advisor (Verdict / Risk / Action Plan).

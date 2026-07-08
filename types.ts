@@ -49,6 +49,9 @@ export interface FinanceParams {
   holdingYears: number; // Ownership horizon
   dieselInflationPct: number; // Annual fuel price escalation
   salaryInflationPct: number; // Annual driver/staff wage escalation
+  maintenanceAgingPct: number; // Annual non-linear rise in maintenance/tyre cost with age
+  corporateTaxRatePct: number; // For WDV depreciation tax shield
+  useTaxShield: boolean; // Toggle India Income-Tax WDV depreciation benefit
 }
 
 // Electric vehicle comparison profile (eFAST / ICCT-style BET vs diesel)
@@ -61,6 +64,9 @@ export interface EvParams {
   residualValue: number;
   gridCo2PerKwh: number; // kg CO2 per kWh (grid intensity)
   kwhPerKm: number; // Energy consumption
+  chargerCost: number; // Charging infra CAPEX per vehicle (fast charger + grid)
+  evAvailabilityMultiplier: number; // 0-1 uptime factor vs diesel (opportunity charging)
+  payloadPenaltyTons: number; // Payload lost to battery weight (matters on Ton basis)
 }
 
 export interface SimulationResult {
@@ -85,6 +91,7 @@ export interface SimulationResult {
   npvSavings: number; // npvMarket - npvOwn
   co2TonnesPerYear: number; // Diesel fleet tailpipe CO2
   costBreakdown: CostSlice[]; // Accurate cost structure (no magic numbers)
+  taxShieldNpv: number; // NPV of WDV depreciation tax savings (0 if disabled)
 }
 
 export interface CostSlice {
@@ -115,6 +122,31 @@ export interface MonteCarloResult {
   histogram: { bucket: number; count: number }[];
 }
 
+// Per trip-count uncertainty band for the break-even chart
+export interface ConfidencePoint {
+  trips: number;
+  ownP10: number;
+  ownP50: number;
+  ownP90: number;
+  ownBand: [number, number]; // [P10, P90-P10] for stacked Area rendering
+  market: number;
+}
+
+// Heterogeneous fleet: one entry per vehicle type
+export interface VehicleProfile {
+  id: string;
+  name: string;
+  count: number;
+  vehicleCost: number;
+  mileageKml: number;
+  residualValue: number;
+}
+
+export interface FleetParams {
+  enabled: boolean;
+  profiles: VehicleProfile[];
+}
+
 export interface TCOParams {
   capex: CapexParams;
   opexFixed: OpexFixedParams;
@@ -122,6 +154,7 @@ export interface TCOParams {
   market: MarketBenchmarkParams;
   finance: FinanceParams;
   ev: EvParams;
+  fleet: FleetParams;
 }
 
 export interface Scenario {

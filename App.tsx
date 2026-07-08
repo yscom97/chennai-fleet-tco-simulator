@@ -3,21 +3,22 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Truck, ChartPieSlice, WarningCircle, CheckCircle, Brain, CurrencyInr,
   GasPump, UserGear, TrafficSignal, Moon, Sun, Export, Copy, FloppyDisk,
-  Trash, Lightning, Leaf, Bank, ArrowClockwise, Info, ChartLineUp,
+  Trash, Lightning, Leaf, Bank, ArrowClockwise, Info, Path, Plus, Stack,
 } from '@phosphor-icons/react';
 import {
-  PieChart, Pie, Cell, BarChart, Bar,
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar, ComposedChart, Area,
+  Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
-import { TCOParams, SimulationResult, Scenario } from './types';
+import { TCOParams, Scenario } from './types';
 import {
-  calculateTCO, calculateEv, runSensitivity, runMonteCarlo,
+  calculateTCO, calculateEv, runSensitivity, runMonteCarlo, runConfidenceBand,
   formatINR, formatCompact,
 } from './services/calculations';
 import { generateAnalysis } from './services/analysis';
 import {
   loadScenarios, saveScenarios, makeScenario, exportCsv,
   encodeParamsToUrl, decodeParamsFromUrl, benchmark, inrCompactAxis, formatDate,
+  ROUTE_PRESETS,
 } from './services/scenarios';
 
 const INITIAL_PARAMS: TCOParams = {
@@ -32,10 +33,21 @@ const INITIAL_PARAMS: TCOParams = {
     adBlueCostPerKm: 0.5, tireCostPerKm: 1.8, maintenancePerKm: 1.2, fastagPerTrip: 1200, incidentalsPerTrip: 800,
   },
   market: { unitType: 'Trip', unitRate: 12500, tripDistance: 120, monthlyTrips: 26, availabilityPercent: 92, tonnage: 20 },
-  finance: { discountRatePct: 10, holdingYears: 5, dieselInflationPct: 5, salaryInflationPct: 7 },
+  finance: {
+    discountRatePct: 10, holdingYears: 5, dieselInflationPct: 5, salaryInflationPct: 7,
+    maintenanceAgingPct: 8, corporateTaxRatePct: 25, useTaxShield: true,
+  },
   ev: {
     enabled: false, vehicleCost: 5500000, energyCostPerKm: 12, maintenancePerKm: 0.6,
     batteryReplacementCost: 1200000, residualValue: 900000, gridCo2PerKwh: 0.71, kwhPerKm: 1.4,
+    chargerCost: 1500000, evAvailabilityMultiplier: 0.9, payloadPenaltyTons: 3,
+  },
+  fleet: {
+    enabled: false,
+    profiles: [
+      { id: 'p1', name: '20FT Triple Axle', count: 6, vehicleCost: 3200000, mileageKml: 4.5, residualValue: 800000 },
+      { id: 'p2', name: '40FT Trailer', count: 3, vehicleCost: 4500000, mileageKml: 3.6, residualValue: 1100000 },
+    ],
   },
 };
 
@@ -52,6 +64,7 @@ export default function App() {
   const evResult = useMemo(() => (params.ev.enabled ? calculateEv(params, results) : null), [params, results]);
   const sensitivity = useMemo(() => runSensitivity(params), [params]);
   const monteCarlo = useMemo(() => runMonteCarlo(params), [params]);
+  const confidenceBand = useMemo(() => runConfidenceBand(params), [params]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
@@ -69,6 +82,29 @@ export default function App() {
 
   const handleAnalyze = () => setReport(generateAnalysis(params, results));
   const handleReset = () => { setParams(INITIAL_PARAMS); notify('Reset to defaults'); };
+
+  const applyPreset = (idx: number) => {
+    if (idx < 0) return;
+    const preset = ROUTE_PRESETS[idx];
+    setParams((prev) => ({ ...prev, ...preset.patch(prev) }));
+    notify(`Loaded: ${preset.name}`);
+  };
+
+  const updateProfile = (id: string, field: string, value: any) =>
+    setParams((prev) => ({
+      ...prev,
+      fleet: { ...prev.fleet, profiles: prev.fleet.profiles.map((p) => (p.id === id ? { ...p, [field]: value } : p)) },
+    }));
+  const addProfile = () =>
+    setParams((prev) => ({
+      ...prev,
+      fleet: {
+        ...prev.fleet,
+        profiles: [...prev.fleet.profiles, { id: `p${prev.fleet.profiles.length}_${prev.fleet.profiles.reduce((s, p) => s + p.count, 0)}`, name: 'New Type', count: 1, vehicleCost: 3000000, mileageKml: 4.5, residualValue: 700000 }],
+      },
+    }));
+  const removeProfile = (id: string) =>
+    setParams((prev) => ({ ...prev, fleet: { ...prev.fleet, profiles: prev.fleet.profiles.filter((p) => p.id !== id) } }));
 
   const handleSaveScenario = () => {
     const name = prompt('Scenario name?', `Scenario ${scenarios.length + 1}`);
@@ -95,17 +131,20 @@ export default function App() {
     }
   };
 
-  const numV = params.capex.numVehicles;
+  const numV = params.fleet.enabled
+    ? params.fleet.profiles.reduce((s, p) => s + p.count, 0)
+    : params.capex.numVehicles;
   const perVehicleOwn = results.totalMonthlyOwnCost / (numV || 1);
   const pieData = results.costBreakdown.map((s) => ({ name: s.name, value: Math.round((s.value / (perVehicleOwn || 1)) * 100) }));
 
-  const sensitivityData = Array.from({ length: 11 }, (_, i) => {
-    const tripCount = 10 + i * 3;
-    const dist = params.market.tripDistance * tripCount;
-    const ownCost = results.fixedMonthlyCost + results.variableCostPerKm * dist;
-    const marketRatePerTrip = results.totalMonthlyMarketCost / (params.market.monthlyTrips * numV || 1);
-    return { trips: tripCount, Own: Math.round(ownCost), Market: Math.round(marketRatePerTrip * tripCount) };
-  });
+  // Confidence-band chart data (P10–P90 own cost as a shaded Area)
+  const bandData = confidenceBand.map((c) => ({
+    trips: c.trips,
+    low: c.ownP10,
+    band: c.ownP90 - c.ownP10,
+    Own: c.ownP50,
+    Market: c.market,
+  }));
 
   // Theme-aware chart colors
   const axis = dark ? '#94a3b8' : '#64748b';
@@ -147,6 +186,21 @@ export default function App() {
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Sidebar */}
         <aside className="w-full lg:w-[400px] border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-y-auto p-6 flex flex-col gap-8 shrink-0">
+          <div className="space-y-1">
+            <FieldLabel label="Chennai Route Preset" tip="Load a representative route configuration" />
+            <select
+              defaultValue="-1"
+              onChange={(e) => { applyPreset(parseInt(e.target.value)); e.target.value = '-1'; }}
+              className="w-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded px-3 py-2 text-sm font-medium text-blue-900 dark:text-blue-200 focus:ring-2 focus:ring-blue-500 outline-none"
+              aria-label="Load route preset"
+            >
+              <option value="-1">Load a preset…</option>
+              {ROUTE_PRESETS.map((p, i) => (
+                <option key={p.name} value={i}>{p.name} — {p.hint}</option>
+              ))}
+            </select>
+          </div>
+
           <Section icon={<CurrencyInr weight="bold" />} title="CAPEX & Financing">
             <Input label="Vehicle Unit Cost (₹)" tip="On-road price per truck" value={params.capex.vehicleCost} onChange={(v) => handleInputChange('capex', 'vehicleCost', v)} type="number" />
             <div className="grid grid-cols-2 gap-3">
@@ -169,6 +223,14 @@ export default function App() {
               <Input label="Diesel Inflation (%/yr)" value={params.finance.dieselInflationPct} onChange={(v) => handleInputChange('finance', 'dieselInflationPct', v)} type="number" step="0.5" min={0} max={20} />
               <Input label="Salary Inflation (%/yr)" value={params.finance.salaryInflationPct} onChange={(v) => handleInputChange('finance', 'salaryInflationPct', v)} type="number" step="0.5" min={0} max={20} />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Maint. Aging (%/yr)" tip="Non-linear rise in maintenance & tyre cost as the vehicle ages" value={params.finance.maintenanceAgingPct} onChange={(v) => handleInputChange('finance', 'maintenanceAgingPct', v)} type="number" step="1" min={0} max={30} />
+              <Input label="Corp. Tax Rate (%)" tip="Used for WDV depreciation tax shield" value={params.finance.corporateTaxRatePct} onChange={(v) => handleInputChange('finance', 'corporateTaxRatePct', v)} type="number" step="1" min={0} max={45} />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none pt-1">
+              <input type="checkbox" checked={params.finance.useTaxShield} onChange={(e) => handleInputChange('finance', 'useTaxShield', e.target.checked)} className="w-4 h-4 accent-blue-600" />
+              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Apply WDV depreciation tax shield <span className="text-slate-400">(assumes taxable profit)</span></span>
+            </label>
           </Section>
 
           <Section icon={<TrafficSignal weight="bold" />} title="Chennai Port Ops (TAT)">
@@ -237,12 +299,48 @@ export default function App() {
               <div className="space-y-3 pt-1">
                 <div className="grid grid-cols-2 gap-3">
                   <Input label="EV Unit Cost (₹)" value={params.ev.vehicleCost} onChange={(v) => handleInputChange('ev', 'vehicleCost', v)} type="number" />
-                  <Input label="Energy (₹/Km)" value={params.ev.energyCostPerKm} onChange={(v) => handleInputChange('ev', 'energyCostPerKm', v)} type="number" step="0.5" />
+                  <Input label="Charger CAPEX (₹)" tip="Fast charger + grid connection per vehicle" value={params.ev.chargerCost} onChange={(v) => handleInputChange('ev', 'chargerCost', v)} type="number" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
+                  <Input label="Energy (₹/Km)" value={params.ev.energyCostPerKm} onChange={(v) => handleInputChange('ev', 'energyCostPerKm', v)} type="number" step="0.5" />
                   <Input label="EV Maint (₹/Km)" value={params.ev.maintenancePerKm} onChange={(v) => handleInputChange('ev', 'maintenancePerKm', v)} type="number" step="0.1" />
-                  <Input label="Battery Swap (₹)" tip="Mid-life battery replacement" value={params.ev.batteryReplacementCost} onChange={(v) => handleInputChange('ev', 'batteryReplacementCost', v)} type="number" />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Battery Swap (₹)" tip="Mid-life battery replacement" value={params.ev.batteryReplacementCost} onChange={(v) => handleInputChange('ev', 'batteryReplacementCost', v)} type="number" />
+                  <Input label="Uptime vs Diesel" tip="Opportunity-charging downtime factor (0.9 = 90% of diesel uptime)" value={params.ev.evAvailabilityMultiplier} onChange={(v) => handleInputChange('ev', 'evAvailabilityMultiplier', v)} type="number" step="0.05" min={0.5} max={1} />
+                </div>
+                {params.market.unitType === 'Ton' && (
+                  <Input label="Payload Penalty (Ton)" tip="Payload lost to battery weight — increases trips needed on a per-ton basis" value={params.ev.payloadPenaltyTons} onChange={(v) => handleInputChange('ev', 'payloadPenaltyTons', v)} type="number" step="0.5" />
+                )}
+              </div>
+            )}
+          </Section>
+
+          <Section icon={<Stack weight="bold" />} title="Fleet Composition">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={params.fleet.enabled} onChange={(e) => handleInputChange('fleet', 'enabled', e.target.checked)} className="w-4 h-4 accent-blue-600" />
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Mixed fleet (multiple types)</span>
+            </label>
+            {params.fleet.enabled && (
+              <div className="space-y-3 pt-1">
+                {params.fleet.profiles.map((p) => (
+                  <div key={p.id} className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input value={p.name} onChange={(e) => updateProfile(p.id, 'name', e.target.value)} className="flex-1 bg-transparent text-sm font-bold text-slate-800 dark:text-slate-100 outline-none border-b border-transparent focus:border-blue-500" aria-label="Vehicle type name" />
+                      <button onClick={() => removeProfile(p.id)} aria-label="Remove type" className="text-slate-400 hover:text-rose-500"><Trash size={14} /></button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input label="Count" value={p.count} onChange={(v) => updateProfile(p.id, 'count', v)} type="number" min={0} max={100} />
+                      <Input label="Unit Cost (₹)" value={p.vehicleCost} onChange={(v) => updateProfile(p.id, 'vehicleCost', v)} type="number" />
+                      <Input label="Mileage (km/L)" value={p.mileageKml} onChange={(v) => updateProfile(p.id, 'mileageKml', v)} type="number" step="0.1" />
+                      <Input label="Residual (₹)" value={p.residualValue} onChange={(v) => updateProfile(p.id, 'residualValue', v)} type="number" />
+                    </div>
+                  </div>
+                ))}
+                <button onClick={addProfile} className="w-full flex items-center justify-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 border border-dashed border-blue-300 dark:border-blue-800 rounded-lg py-2 hover:bg-blue-50 dark:hover:bg-blue-950/40">
+                  <Plus size={14} /> Add vehicle type
+                </button>
+                <p className="text-[10px] text-slate-400">Overrides fleet size & per-unit CAPEX/mileage above.</p>
               </div>
             )}
           </Section>
@@ -260,22 +358,26 @@ export default function App() {
 
           {/* Charts row 1 */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Card title="Break-even Sensitivity (Rotation)">
+            <Card title="Break-even & Cost Uncertainty (P10–P90)">
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sensitivityData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <ComposedChart data={bandData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={grid} />
                     <XAxis dataKey="trips" stroke={axis} fontSize={11} label={{ value: 'Trips / month', position: 'insideBottom', offset: -2, fontSize: 10, fill: axis }} />
                     <YAxis stroke={axis} fontSize={11} tickFormatter={inrCompactAxis} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatINR(v)} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [formatINR(v), n === 'band' ? 'P90–P10' : n === 'low' ? 'P10' : n]} />
                     {isFinite(results.breakEvenTrips) && (
                       <ReferenceLine x={Math.round(results.breakEvenTrips)} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: `BEP ${Math.round(results.breakEvenTrips)}`, fontSize: 10, fill: '#f59e0b', position: 'top' }} />
                     )}
-                    <Line type="monotone" dataKey="Own" stroke="#2563eb" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    {/* P10–P90 own-cost band: invisible base + shaded height */}
+                    <Area dataKey="low" stackId="band" stroke="none" fill="transparent" isAnimationActive={false} />
+                    <Area dataKey="band" stackId="band" stroke="none" fill="#2563eb" fillOpacity={0.15} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="Own" stroke="#2563eb" strokeWidth={2.5} dot={false} isAnimationActive={false} name="Own (P50)" />
                     <Line type="monotone" dataKey="Market" stroke="#ef4444" strokeWidth={2.5} dot={false} strokeDasharray="5 5" isAnimationActive={false} />
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
+              <p className="text-[10px] text-slate-400 text-center mt-1">Shaded band = own-cost P10–P90 across fuel/mileage/rate uncertainty</p>
             </Card>
 
             <Card title="Cost Structure (per vehicle / month)">
@@ -373,6 +475,7 @@ export default function App() {
                   <DataItem label="Annual Savings (fleet)" value={formatINR(results.monthlySavings * 12)} />
                   <DataItem label="NPV — Own (fleet)" value={formatCompact(results.npvOwn)} />
                   <DataItem label="NPV — Market (fleet)" value={formatCompact(results.npvMarket)} />
+                  {results.taxShieldNpv > 0 && <DataItem label="Tax Shield NPV (WDV)" value={formatCompact(results.taxShieldNpv)} />}
                   <DataItem label="Payback on Downpayment" value={`${((params.capex.vehicleCost * (params.capex.downPaymentPercent / 100) * numV) / (results.monthlySavings || 1)).toFixed(1)} Mo`} />
                 </div>
               </Card>
